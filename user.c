@@ -147,9 +147,9 @@ int main(int argc, char *argv[]) {
 		perror("Error: failed to get id for semaphore");
 		exit(EXIT_FAILURE);
 	}
+
 	process(procID);
-	
   	removeSharedMemory(); 
-	//removeSem();
+	
 	return 0;
 }

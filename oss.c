@@ -15,7 +15,7 @@
 
 pid_t all_cProcess[MAX_PROCESS];
 
-int shmid;
+int shmid,shmidPCB;
 struct sharedM *shmp;
 FILE *file; //Log file
 
@@ -25,6 +25,7 @@ char *mainLog; //Main log file
 
 struct timeval  now;
 struct tm* local;
+struct sharedM *shmPCB;
 int n_process=-1;
 int semID;
 
@@ -54,13 +55,19 @@ void createSem() {
 
 //Allocate shared memory
 int createSharedMemory() {
-	//Create shared memory segment
+	//Create shared memory segment for system clock
 	shmid=shmget(SHM_KEY, sizeof(struct sharedM), 0644|IPC_CREAT);
 	if (shmid == -1) {
-      		perror("Error:shmget");
+      		perror("Error:shmget failed");
       		exit(EXIT_FAILURE);
    	}
 	
+	//Create shared memory segment for process control block
+	shmidPCB=shmget(SHM_PCB_KEY,sizeof(struct sharedM), 0644|IPC_CREAT);
+	if (shmid == -1) {
+                perror("Error:shmget failed");
+                exit(EXIT_FAILURE);
+        }
 	return shmid;
 }
 
@@ -71,7 +78,14 @@ void *attachSharedMemory() {
       		perror("Error:shmat");
       		exit(EXIT_FAILURE);
    	}	
+	
+	shmPCB=(struct sharedM *) shmat(shmidPCB, NULL, 0);
+        if (shmPCB == (struct sharedM *) -1) {
+                perror("Error:shmat");
+                exit(EXIT_FAILURE);
+	}
 }
+
 
 //Deallocate shared memory
 void removeSharedMemory() {
@@ -144,8 +158,7 @@ void forkProcess(int n_process) {
 	int totalProc = 0;
 	pid_t p;
 
-	//for (i=0;i<n_process;i++) {
-	while(1){
+	//while(1){
 		pid_t pid = fork();
 		if (pid<0) {
 			perror("Error: Fork failed");
@@ -162,7 +175,7 @@ void forkProcess(int n_process) {
 			sprintf(procID,"%d",p);
 			sprintf(ordNum,"%d",totalProc);
 			
-			execl("slave",procID,ordNum,NULL);
+			execl("user",procID,ordNum,NULL);
 			
 			//if execl failed
 			perror("Error: execl failed ");
@@ -197,7 +210,7 @@ void forkProcess(int n_process) {
 			}
 
 		}
-	}
+	//}
 
 	while((p = wait(NULL)) > 0) {
 		logTermination(p);
@@ -216,8 +229,9 @@ int validNum(char* sec){
 }
 
 int main(int argc, char *argv[])
-{	
-	int sec=100;
+{
+	struct sharedM shmp={.maxTimeBetweenNewProcsNS=2000000000,.maxTimeBetweenNewProcsSecs=3};
+	int maxSec=100;
 	int option;
 	FILE *file;	
 	signal(SIGINT, siginit_handler);
@@ -240,12 +254,12 @@ int main(int argc, char *argv[])
 
 				case 's':
 					if (strcmp(optarg,"-l")==0) {
-                                                fprintf(stderr,"%s: ERROR: %s without argument\n",argv[    0],optarg);
+                                                fprintf(stderr,"%s: ERROR: %s missing argument\n",argv[0],optarg);
                                                 exit(EXIT_FAILURE);
                                         }
 
 					if(validNum(optarg)){
-						sec = atoi(optarg);
+						maxSec = atoi(optarg);
 					}else{
 						fprintf(stderr,"%s: ERROR: %s is not a valid number\n",argv[0],optarg);
 						return EXIT_FAILURE;
@@ -254,7 +268,7 @@ int main(int argc, char *argv[])
 
 				case 'l':
 					if (strcmp(optarg,"-s")==0) {
-						fprintf(stderr,"%s: ERROR: %s without argument\n",argv[    0],optarg);          
+						fprintf(stderr,"%s: ERROR: %s missing argument\n",argv[0],optarg);          
 						exit(EXIT_FAILURE);
 					}
 
@@ -263,60 +277,27 @@ int main(int argc, char *argv[])
 					break;
 				case '?':
 					if(optopt == 's' || optopt == 'l')
-						fprintf(stderr,"%s: ERROR: -%c without argument\n",argv[0],optopt);
+						fprintf(stderr,"%s: ERROR: -%c missing argument\n",argv[0],optopt);
 					else 
-						fprintf(stderr, "%s: ERROR: Unrecognized option: -%c\n",argv[0],optopt);
+						fprintf(stderr, "%s: ERROR: Unknown option: -%c\n",argv[0],optopt);
 					return EXIT_FAILURE;
 			}
-		} else {
-			if(n_process == -1) {
-				if(validNum(argv[optind])) {
-					n_process = atoi(argv[optind]);	
-					
-					//Validate if number of processes doesn't exceed 20
-					if(n_process >MAX_PROCESS) {
-						fprintf(stderr,"%s: Error: Number of processes exceeds 20\n",argv[0]);
-                				exit(1);
-					}
-
-				} else {
-                                       fprintf(stderr,"%s: ERROR: %s is not a valid number\n",argv[0],argv[optind]);
-                                       return EXIT_FAILURE;
-                                }
-
-			}
-			else{
-				fprintf(stderr,"Error: There are too many file name\n");
-				return EXIT_FAILURE;
-			}
-			optind++;		
-		}
-		
+		} 
 	}
 	
 	signal(SIGALRM, alarm_handler);
-        alarm(sec);
+        alarm(maxSec);
 
-	/*(if (n_process ==-1) {
-		fprintf(stderr,"%s: Error: Missing number of processes\n",argv[0]);
-		exit(1);
-	} 
-
-	//Validate if number of processes doesn't exceed 20
-        else if (n_process >MAX_PROCESS || n_process <1) {
-        	fprintf(stderr,"%s: Error: Number of processes needs to be from 1-20\n",argv[0]);
-                exit(EXIT_FAILURE);
-        } */
-
+	
 	//MAIN CODE
-	/*createSharedMemory();
+	createSharedMemory();
         attachSharedMemory(); 
 	createSem();	
-	
-	forkProcess(n_process);
+	//printf("NS-Seconds: %d",shmp.maxTimeBetweenNewProcsNS);
+	//forkProcess(n_process);
        	
 	removeSharedMemory();
-	*/
-	printf("%s",mainLog);
+	
+	//printf("%s",mainLog);
 	return 0;
 }
