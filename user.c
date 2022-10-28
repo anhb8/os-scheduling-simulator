@@ -63,6 +63,7 @@ void siginit_handler() {
         exit(EXIT_FAILURE);
 }
 
+/*
 void enterMessage(int n){
 	gettimeofday(&now, NULL);
 	local = localtime(&now.tv_sec);	
@@ -79,10 +80,11 @@ void enterMessage(int n){
 	fclose(file);
 }
 
+
 void exitMessage(int n){
         gettimeofday(&now, NULL);
         local = localtime(&now.tv_sec);
-	
+		
 	file=fopen(ofile,"a");
         lfile=fopen(logfile,"a");
         
@@ -94,7 +96,7 @@ void exitMessage(int n){
         fclose(lfile);
 	fclose(file);
 }
-
+*/
 void process (int i) {
         int j;
 	srand(time(0)+i);
@@ -107,10 +109,10 @@ void process (int i) {
 
 		//Critical section
 		sleep(ran);
-		enterMessage(i);
+		//enterMessage(i);
 
 		sleep(ran);
-        	exitMessage(i);
+        	//exitMessage(i);
 
 		//Exit section
 		signal_Sem();

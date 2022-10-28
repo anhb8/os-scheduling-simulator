@@ -11,21 +11,25 @@
 #include <time.h> //local time
 #include <sys/time.h>
 #include <sys/sem.h>
+#include <sys/msg.h>
 #include "config.h"
 
 pid_t all_cProcess[MAX_PROCESS];
 
-int shmid,shmidPCB;
+int shmid,shmidPCB,msqid;
 struct sharedM *shmp;
-FILE *file; //Log file
+struct processControlBlock *shmPCB;
+static const struct sharedM clockT = {.maxTimeBetweenNewProcsNS=2000000000,.maxTimeBetweenNewProcsSecs=3};
+int runTimeSecs=0,runTimeNS=0;
 
+FILE *file; //Log file
 char logfile[10]="logfile.";
 char logNum[3]; //Process number
 char *mainLog; //Main log file
 
 struct timeval  now;
 struct tm* local;
-struct sharedM *shmPCB;
+
 int n_process=-1;
 int semID;
 
@@ -54,33 +58,40 @@ void createSem() {
 }
 
 //Allocate shared memory
-int createSharedMemory() {
+void createSharedMemory() {
 	//Create shared memory segment for system clock
 	shmid=shmget(SHM_KEY, sizeof(struct sharedM), 0644|IPC_CREAT);
 	if (shmid == -1) {
-      		perror("Error:shmget failed");
+      		perror("Error: shmget failed");
       		exit(EXIT_FAILURE);
    	}
 	
 	//Create shared memory segment for process control block
 	shmidPCB=shmget(SHM_PCB_KEY,sizeof(struct sharedM), 0644|IPC_CREAT);
-	if (shmid == -1) {
-                perror("Error:shmget failed");
+	if (shmidPCB == -1) {
+                perror("Error: shmget failed");
                 exit(EXIT_FAILURE);
         }
-	return shmid;
+
+	//Create message queue
+	if ((msqid = msgget(MSG_KEY, 0666 | IPC_CREAT)) == -1) {
+      		perror("Error: msgget");
+      		exit(EXIT_FAILURE);
+   	}
 }
 
 //Attach the process to shared memory segment just created - pointer
 void *attachSharedMemory() {
+	//System clock
 	shmp=(struct sharedM *) shmat(shmid, NULL, 0);
 	if (shmp == (struct sharedM *) -1) {
       		perror("Error:shmat");
       		exit(EXIT_FAILURE);
    	}	
 	
-	shmPCB=(struct sharedM *) shmat(shmidPCB, NULL, 0);
-        if (shmPCB == (struct sharedM *) -1) {
+	//Process control block
+	shmPCB=(struct processControlBlock *) shmat(shmidPCB, NULL, 0);
+        if (shmPCB == (struct processControlBlock *) -1) {
                 perror("Error:shmat");
                 exit(EXIT_FAILURE);
 	}
@@ -91,27 +102,50 @@ void *attachSharedMemory() {
 void removeSharedMemory() {
 	//Detach the process
 	 if (shmdt(shmp) == -1) {
-      		perror("Error: shmdt");
+      		perror("Error: shmdt failed");
       		exit(EXIT_FAILURE);
    	}
+	
+	 if (shmdt(shmPCB) == -1) {
+                perror("Error: shmdt failed");
+                exit(EXIT_FAILURE);
+        } 
 
 	//Remove shared memory segment
 	if (shmctl(shmid, IPC_RMID, 0) == -1) {
-      		perror("Error: shmctl");
+      		perror("Error: shmctl failed");
      	 	exit(EXIT_FAILURE);
   	}
+	
+	if (shmctl(shmidPCB, IPC_RMID, 0) == -1) {
+                perror("Error: shmctl failed");
+                exit(EXIT_FAILURE);
+        }
 
 	//Remove semaphore
 	if (semctl(semID, 0, IPC_RMID) == -1) {
-                perror("semctl");
-                exit(1);
+                perror("Error: semctl failed");
+                exit(EXIT_FAILURE);
         }
+
+	//Remove message queue
+	if(msgctl(msqid, IPC_RMID, NULL) == -1){
+                perror("Error: msgctl failed");
+		exit(EXIT_FAILURE);
+	}
 }
+
+//Create random time for system clock to launch new user process
+void createTime () {
+	runTimeSecs = rand() % clockT.maxTimeBetweenNewProcsSecs;
+	runTimeNS = rand() % clockT.maxTimeBetweenNewProcsNS;
+}
+
 void logTermination(pid_t p){ 
-        file=fopen(mainLog,"w");
+        file=fopen(mainLog,"a");
         gettimeofday(&now, NULL);
         local = localtime(&now.tv_sec);
-        fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,p);
+        fprintf(file,"OSS: Generating process with PID %d and putting in in queue at time %d:%d \n",p,runTimeSecs,runTimeNS);
         fclose(file);
 }
 
@@ -157,6 +191,10 @@ void forkProcess(int n_process) {
 	int availSpot = n_process;
 	int totalProc = 0;
 	pid_t p;
+	
+	//Create user process at random interavals of simulated time
+	createTime();
+        printf("%d",runTimeNS);
 
 	//while(1){
 		pid_t pid = fork();
@@ -186,6 +224,7 @@ void forkProcess(int n_process) {
 			int index=findIndex();
 			all_cProcess[index] = pid;
 			
+
 			if (availSpot == 0) {
 				p = wait(NULL);
 				logTermination(p);
@@ -230,7 +269,6 @@ int validNum(char* sec){
 
 int main(int argc, char *argv[])
 {
-	struct sharedM shmp={.maxTimeBetweenNewProcsNS=2000000000,.maxTimeBetweenNewProcsSecs=3};
 	int maxSec=100;
 	int option;
 	FILE *file;	
@@ -266,6 +304,7 @@ int main(int argc, char *argv[])
 					}
 					break;
 
+					
 				case 'l':
 					if (strcmp(optarg,"-s")==0) {
 						fprintf(stderr,"%s: ERROR: %s missing argument\n",argv[0],optarg);          
@@ -293,9 +332,8 @@ int main(int argc, char *argv[])
 	createSharedMemory();
         attachSharedMemory(); 
 	createSem();	
-	//printf("NS-Seconds: %d",shmp.maxTimeBetweenNewProcsNS);
-	//forkProcess(n_process);
-       	
+	
+	forkProcess(n_process);
 	removeSharedMemory();
 	
 	//printf("%s",mainLog);
