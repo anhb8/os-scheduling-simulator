@@ -22,4 +22,4 @@ $(USER): $(OBJ2)
 	$(CC) $(CFLAGS) $(OBJ2) -o $(USER)
 
 clean:  
-	rm -f $(OUTPUT) *.o  cstest logfile* *.mainlog
+	rm -f $(OUTPUT) *.o *.mainlog

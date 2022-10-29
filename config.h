@@ -1,33 +1,102 @@
 #ifndef CONFIG_H
-#define MAX_PROCESS 20
-enum state{idle,want_in,in_cs};
-struct sharedM {
-	int turn;
-	int flag[MAX_PROCESS];
-	//System clock
-	int maxTimeBetweenNewProcsNS;
-	int maxTimeBetweenNewProcsSecs;
+#define CONFIG_H
+
+#define MAXSECONDS 3
+#define MAXPROCESSES 18
+#define TOTAL_MAXPROC 50
+
+//Time slice for 3 scheduling queues
+#define Q1_TIMESLICE 10000000
+#define Q2_TIMESLICE 20000000
+#define Q3_TIMESLICE 40000000
+
+//Dispatch time
+#define MINDISPATCH 100
+#define MAXDISPATCH 10000
+
+//Maximum lines in log file
+#define MAXLINE 10000
+#define IO_BOUND_PROB 30
+
+//Maximum wait time 
+#define MAXWAIT_Q2 2000000000
+#define MAXWAIT_Q3 4000000000
+
+const key_t sharedM_key = 1234;
+const key_t queue_key = 2121;
+
+//define states for process
+enum state{
+	sNEW = 0,
+	sREADY,
+	sBLOCKED,
+	sTERMINATED
+};
+
+//define message format to communicate between scheduler and child process
+struct ossMsg{
+	long mtype;
+	pid_t from;
+	
+	int timeslice;
+	
+	struct timespec clock;
+	struct timespec blockedTime;
 
 };
 
-struct processControlBlock {
-        struct sharedM CPUTime;
-        struct sharedM totalTime;
-        struct sharedM burstTime;
+#define MESSAGE_SIZE (sizeof(struct ossMsg) - sizeof(long))
+
+//Scheduling queue types: highest priority, second highest priority, third highest priority, and blocked
+enum qTypes{
+	qONE = 0,
+	qTWO,
+	qTHREE,
+	qBLOCKED
+};
+
+enum pTypes{
+	pREAL=0,
+	pNORM,
+	pCOUNT
+};
+
+//Scheduling queue
+struct queue{
+	unsigned int ids[MAXPROCESSES];
+	unsigned int length;
+};
+
+//Process control block
+struct userPCB{
 	pid_t pid;
-        struct sharedM priority;
+	int priority;
+	unsigned int id;
+	enum state state;
+
+	struct timespec t_cpu;
+	struct timespec t_sys;
+	struct timespec t_burst;
+	struct timespec t_blocked;
+	struct timespec t_started;
 };
 
-struct semaphore {
-	int count; //Number of available resources
-	//int wait; //Sleeping processes that are waiting for resources
-	//int sleepers; //Processes sleeping on semaphore
-	struct semaphore *wait;
+//Shared memory
+struct sharedM{
+	struct timespec clock;
+	struct userPCB users[MAXPROCESSES];
 };
 
+//Report
+struct ossReport{
+	unsigned int usersStarted;
+	unsigned int usersTerminated;
+	struct timespec wait_time;
+	struct timespec sys_time;
+	struct timespec cpu_time;
+	struct timespec blocked_time[pCOUNT];
+	struct timespec cpu_IdleTime;
+}; 
 
-key_t key=4321;
-key_t SHM_KEY=1234;
-key_t SHM_PCB_KEY=3999;
-key_t MSG_KEY=2121;
+
 #endif
