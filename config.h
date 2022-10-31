@@ -25,7 +25,7 @@
 const key_t sharedM_key = 1234;
 const key_t queue_key = 2121;
 
-//define states for process
+//Define states for process
 enum state{
 	sNEW = 0,
 	sREADY,
@@ -33,7 +33,7 @@ enum state{
 	sTERMINATED
 };
 
-//define message format to communicate between scheduler and child process
+//Define message format to communicate between scheduler and child process
 struct ossMsg{
 	long mtype;
 	pid_t from;
