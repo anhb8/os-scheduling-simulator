@@ -52,13 +52,13 @@ enum qTypes{
 	qONE = 0,
 	qTWO,
 	qTHREE,
-	qBLOCKED
+	qBLOCKED,
+	qCOUNT
 };
 
 enum pTypes{
-	pREAL=0,
-	pNORM,
-	pCOUNT
+	pNORM=0,
+	pREAL
 };
 
 //Scheduling queue
@@ -94,7 +94,7 @@ struct ossReport{
 	struct timespec wait_time;
 	struct timespec sys_time;
 	struct timespec cpu_time;
-	struct timespec blocked_time[pCOUNT];
+	struct timespec blocked_time[qCOUNT];
 	struct timespec cpu_IdleTime;
 }; 
 
