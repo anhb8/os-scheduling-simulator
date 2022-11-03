@@ -127,6 +127,10 @@ static int getFreeSlot() {
 static int pushQ(const int qid, const int index){
 	struct queue *q = &pq[qid];
   	q->ids[q->length++] = index;
+
+	shm->users[index].t_startWait.tv_sec = shm->clock.tv_sec;
+	shm->users[index].t_startWait.tv_nsec = shm->clock.tv_nsec;
+
   	return qid;
 
 }
@@ -593,10 +597,48 @@ static int runChildProcess(){
 	return 0;
 }
 
+static int checkStarve(){
+	int i,j;
+	static struct timespec workTime = {.tv_sec = 0, .tv_nsec = 0};
+	for(i = qTWO; i <= qTHREE; i++){
+		for(j = 0; j < pq[i].length; j++){
+			int id = pq[i].ids[j]; //get process ID in PCB from the queue
+			int max_wait = i == qTWO ? MAXWAIT_Q2 : MAXWAIT_Q3;
+
+			struct timespec timediff;
+			subTime(&shm->users[id].t_startWait, &shm->clock, &timediff);
+			if(timediff.tv_sec >= max_wait){
+				++logLine;
+				printf("OSS: Process with PID %u has been waiting on queue %d for %lu:%lu\n",
+						shm->users[id].id,shm->users[id].q_location, timediff.tv_sec, timediff.tv_nsec);
+
+				//If the wait time is too long, pop this process out of current queue
+				popQ(&pq[i],j);
+	
+				//And add it on the first queue
+				pushQ(qONE,id);
+
+				//record time for this operation
+				workTime.tv_nsec = rand() % MAXDISPATCH;
+				addTime(&shm->clock, &workTime);
+
+				++logLine;
+  				printf("OSS: Pop process with PID %u from queue %d and move it to queue %d", shm->users[id].id, shm->users[id].q_location, qONE);
+
+				++logLine;
+  				printf("OSS: Total time for this operation was %lu nanoseconds\n", workTime.tv_nsec);
+			}	
+		}	
+	}
+	
+	return 0;
+}
+
 static void runningCycle() {
 	while(reportV.usersTerminated < TOTAL_MAXPROC){
 		advanceTimer();
-	        unblockUsers();
+	        checkStarve(); //check queue 2 and queue 3 if there is any starve process
+		unblockUsers();
 		if(runChildProcess() == -1) //return -1 when there is no more process to schedule
 			break;
 		checkLog();

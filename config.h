@@ -19,8 +19,8 @@
 #define IO_BOUND_PROB 30
 
 //Maximum wait time 
-#define MAXWAIT_Q2 2000000000
-#define MAXWAIT_Q3 4000000000
+#define MAXWAIT_Q2 2
+#define MAXWAIT_Q3 4
 
 const key_t sharedM_key = 1234;
 const key_t queue_key = 2121;
@@ -76,6 +76,7 @@ struct userPCB{
 	unsigned int id;
 	enum state state;
 
+	struct timespec t_startWait;
 	struct timespec t_cpu;
 	struct timespec t_sys;
 	struct timespec t_burst;
