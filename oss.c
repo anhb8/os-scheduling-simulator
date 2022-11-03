@@ -272,7 +272,7 @@ static void divTime(struct timespec *a, const int d){
 }
 //Advance system clock 
 static void advanceTimer(){
-	struct timespec t = {.tv_sec = 0, .tv_nsec = 500000000};
+	struct timespec t = {.tv_sec = 0, .tv_nsec = 300000000};
 	//Check if program has generated more than 50 processes
 	if(reportV.usersStarted >= TOTAL_MAXPROC)
 		addTime(&shm->clock, &t);
@@ -475,7 +475,7 @@ static int scheduler(){
 
 			if (message.clock.tv_nsec != TIMESLICE){
                                 ++logLine;
-                                printf("OSS: process with PID %u not using its entire quantum\n",usr->id);
+                                printf("OSS: Process with PID %u not using its entire quantum\n",usr->id);
                         }
 
 			++logLine;
@@ -501,7 +501,7 @@ static int scheduler(){
 
                         if (message.clock.tv_nsec != TIMESLICE){
                                 ++logLine;
-                                printf("OSS: process with PID %u not using its entire quantum\n", usr->id);
+                                printf("OSS: Process with PID %u not using its entire quantum\n", usr->id);
                         }
 
 			++logLine;
@@ -521,7 +521,7 @@ static int runChildProcess(){
 	//static struct timespec t_idle = {.tv_sec = 0, .tv_nsec = 0};
 	static struct timespec t_idle;
 	static struct timespec diff_idle;
-	static int flag = 0;
+	int flag = 0;
 
 	if(pq[qONE].length == 0){
 		if(flag == 0){
@@ -623,7 +623,7 @@ static int checkStarve(){
 				addTime(&shm->clock, &workTime);
 
 				++logLine;
-  				printf("OSS: Pop process with PID %u from queue %d and move it to queue %d", shm->users[id].id, shm->users[id].q_location, qONE);
+  				printf("OSS: Pop process with PID %u from queue %d and move it to queue %d\n", shm->users[id].id, shm->users[id].q_location, qONE);
 
 				++logLine;
   				printf("OSS: Total time for this operation was %lu nanoseconds\n", workTime.tv_nsec);

@@ -22,6 +22,12 @@
 #define MAXWAIT_Q2 2
 #define MAXWAIT_Q3 4
 
+#define BLOCKED_SEC 5
+#define BLOCKED_NSEC 1000
+#define TERM_PROB 10 //termination probability 
+#define CPU_IO_BLOCK_PROB 5
+#define IO_IO_BLOCK_PROB 40
+
 const key_t sharedM_key = 1234;
 const key_t queue_key = 2121;
 

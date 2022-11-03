@@ -55,7 +55,81 @@ static int deallocatesharedM(){
 	return 0;
 }
 
-int main () {
-	printf("Hello World");
+static void handler(){
+	deallocatesharedM();
+	exit(1);
+}
+
+static void userProc(int io_bound){
+	int alive = 1;
+	const int io_block_prob = (io_bound) ? IO_IO_BLOCK_PROB : CPU_IO_BLOCK_PROB;
+	
+	while(alive){
+		struct ossMsg message;
+		
+		if (msgrcv(qid, (void *)&message, MESSAGE_SIZE, getpid(), 0) == -1){
+			fprintf(stderr,"%s: failed to receive message. ",prog);
+                	perror("Error");
+			break;
+		}	
+
+		int timeslice = message.timeslice;
+		if(timeslice == 0){
+			break; // if it has use up its time slice, then exit
+		}
+
+		bzero(&message, sizeof(struct ossMsg));
+
+		int ifTerminate = ((rand() % 100) <= TERM_PROB) ? 1 : 0;
+
+		if(ifTerminate){
+			message.timeslice = sTERMINATED;
+			message.clock.tv_nsec = rand() % timeslice;
+			alive = 0;
+		}else{
+			int ifInterrupt = ((rand() % 100) < io_block_prob) ? 1 : 0;
+			if (ifInterrupt){
+				message.timeslice = sBLOCKED;
+				message.clock.tv_nsec = rand() % timeslice;
+				message.blockedTime.tv_sec = rand() % BLOCKED_SEC;
+				message.blockedTime.tv_nsec = rand() % BLOCKED_NSEC;
+			}else{
+				message.timeslice = sREADY;
+				message.clock.tv_nsec = timeslice;
+			}
+		}
+		
+		message.mtype = getppid();
+		message.from = getpid();
+		if (msgsnd(qid, (void *)&message, MESSAGE_SIZE, 0) == -1){
+			fprintf(stderr,"%s: failed to send message. ",prog);
+                        perror("Error");
+			break;
+		}
+	}
+
+}
+int main (int argc, char** argv) {
+	prog = argv[0];
+
+	if (argc != 2)
+	{
+		fprintf(stderr, "%s: Please passed in IO bound arguments.\n",prog);
+		return EXIT_FAILURE;
+	}
+	
+	signal(SIGINT, handler);
+		
+	const int io_bound = atoi(argv[1]);
+	srand(getpid() + io_bound); //seeding off
+
+	if(createSharedM() == -1)
+		return EXIT_FAILURE;
+
+	userProc(io_bound);
+
+	if(deallocatesharedM() == -1)
+		return EXIT_FAILURE;
+
 	return 0;
 }
