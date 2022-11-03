@@ -654,7 +654,7 @@ static int menu (int argc,char** argv){
       				 printf("%s -h: HELP MENU\n",argv[0]);
                                  printf("\nCommand:\n");
                                  printf("%s -s t       Specify maximum time\n",argv[0]);
-                                 printf("%s -l f            Specify a particular name for log file\n",argv[0]);
+                                 printf("%s -l f       Specify a particular name for log file\n",argv[0]);
                                  printf("\nt: Maximum time in seconds before the system terminates\n");
                                  printf("f: Filename(.mainlog)\n");
                                         

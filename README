@@ -1,0 +1,26 @@
+##Author
+Name: Alina Nguyen
+Course: CS4760 - Project 4
+Date: 10/28/2022
+Language: C
+
+##Project Description
+This program is used to stimulate the process scheduling part of an operating system.
+
+The operating system simulator (oss.c) is served as the master process which fork multiple children at random times.The randomness will be simulated by a logical clock that will also be updated by oss. The operating system simulator allocates shared memory for system data structures, including a process table with a process control blockfor each user process. oss simulates the passing of time by using a simulated system clock and the clock can only be modified by oss. oss creates user processes at random intervals, say every second on an average of the simulated clock. oss acts as the scheduler and it can schedule a process by sending it a message using a message queue or semaphore. It stops generating processes if it has already generated 50 processes in total or if more than 3 real-life seconds have passed. At the end, it creates a report (.mainlog) which includes average wait time, average time in the system, average cpu utilization, average time a process waited in a blocked queue for each of the different types of processes and how long CPU was idle with no ready processes.
+
+The user processes (user.c) is used to perform some work that will take some randome time. It waits on receiving a message giving them a time slice and then it will stimulate running. Then, it sends a message to oss saying how much time they used and if they had to use i/o or had to terminate.
+
+Scheduling algorithm: multi-level feedback queue which having an associate time quantum (highest priority queue - 10 milliseconds,  second highest priority queue - 20 milliseconds, third highest priority queue - 40 milliseconds, blocked queue). If a process in the second highest priority queue waits more than 2 seconds and a process in the third highest priority queue waits more than 4 seconds, the program will push it to the highest priority queue to prevent a process from starving. 
+
+##How to Run the Project
+1.Type: make
+2. Enter any of these following commands:
+a. ./oss -h : Display help menu
+b. ./oss -s t: Specify maximum seconds before the system terminates 
+c. ./oss -l f : Specify a particular name for the log file
+
+t: Maximum time in seconds after which the process should terminate itself if not completed 
+f: Filename 
+
+Remove all the object files that had been created after running program: Enter: make clean
