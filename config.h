@@ -58,7 +58,8 @@ enum qTypes{
 
 enum pTypes{
 	pNORM=0,
-	pREAL
+	pREAL,
+	pCOUNT
 };
 
 //Scheduling queue
@@ -71,6 +72,7 @@ struct queue{
 struct userPCB{
 	pid_t pid;
 	int q_location;
+	int priority;
 	unsigned int id;
 	enum state state;
 
@@ -89,13 +91,15 @@ struct sharedM{
 
 //Report
 struct ossReport{
+	int c_highprior;
+	int c_lowprior;
 	unsigned int usersStarted;
 	unsigned int usersTerminated;
-	struct timespec wait_time;
-	struct timespec sys_time;
-	struct timespec cpu_time;
-	struct timespec blocked_time[qCOUNT];
-	struct timespec cpu_IdleTime;
+	struct timespec t_wait;
+	struct timespec t_sys;
+	struct timespec t_cpu;
+	struct timespec t_blocked[pCOUNT];
+	struct timespec cpuIdleTime;
 }; 
 
 

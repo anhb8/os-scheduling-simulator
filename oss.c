@@ -36,6 +36,8 @@ static unsigned int logLine = 0;
 //Report
 static struct ossReport reportV;
 
+static int qREADY = qONE; //initialize current ready queue as real time process
+
 //Check if log file exceeds 1000 lines
 static void checkLog(){
 	if(logLine >= MAXLINE){
@@ -175,11 +177,11 @@ static void unblockUsers(){
 		}
 
 	}
-
 }
 
 static int forkProcess(){
 	char buf[10];
+	int qSTART;
 	const int u = getFreeSlot();
 	if(u == -1)
 		return EXIT_SUCCESS;
@@ -209,10 +211,14 @@ static int forkProcess(){
 			++reportV.usersStarted;
 			if(io_bound == pREAL){
 				usr->q_location = qONE;
-				//reportV.c_highprior++;
+				usr->priority = pREAL;
+				qSTART = qONE;
+				reportV.c_highprior++;
 			}else{
 				usr->q_location = qTWO;
-				//eportV.c_lowprior++;
+				usr->priority = pNORM;
+				qSTART = qTWO;
+				reportV.c_lowprior++;
 			}
 
 			usr->id = next_id++;
@@ -221,10 +227,10 @@ static int forkProcess(){
 			usr->t_started = shm->clock; //save started time to record system time
 			usr->state = sREADY; //mark process as ready
 
-			pushQ(qONE, u);
+			pushQ(qSTART, u);
 			++logLine;
 			printf("OSS: Generating process with PID %u and putting it in queue %d at time %lu:%lu\n",
-           			usr->id, qONE, shm->clock.tv_sec, shm->clock.tv_nsec);		
+           			usr->id, qSTART, shm->clock.tv_sec, shm->clock.tv_nsec);		
 			break;	
 	}
 	
@@ -255,6 +261,11 @@ static void subTime(struct timespec *a, struct timespec *b, struct timespec *c){
   	}
 }
 
+//Divide time
+static void divTime(struct timespec *a, const int d){
+  	a->tv_sec /= d;
+  	a->tv_nsec /= d;
+}
 //Advance system clock 
 static void advanceTimer(){
 	struct timespec t = {.tv_sec = 0, .tv_nsec = 500000000};
@@ -277,32 +288,50 @@ static void advanceTimer(){
 
 //Initialize variables in the report
 static void initReport(){
+	reportV.c_highprior = 0;
+	reportV.c_lowprior = 0;
 	reportV.usersStarted = 0;
 	reportV.usersTerminated = 0;
-	reportV.wait_time.tv_sec = 0;
-	reportV.wait_time.tv_nsec = 0;
-        reportV.cpu_time.tv_sec = 0;
-        reportV.cpu_time.tv_nsec = 0;
-       	reportV.sys_time.tv_sec = 0;
-        reportV.sys_time.tv_nsec = 0;
-	reportV.cpu_IdleTime.tv_sec = 0;
-        reportV.cpu_IdleTime.tv_nsec = 0;
-        reportV.blocked_time[qONE].tv_sec = 0;
-        reportV.blocked_time[qONE].tv_nsec = 0;
-	reportV.blocked_time[qTWO].tv_sec = 0;
-        reportV.blocked_time[qTWO].tv_nsec = 0;
-	reportV.blocked_time[qTHREE].tv_sec = 0;
-	reportV.blocked_time[qTHREE].tv_nsec = 0;
+	reportV.t_wait.tv_sec = 0;
+	reportV.t_wait.tv_nsec = 0;
+        reportV.t_cpu.tv_sec = 0;
+        reportV.t_cpu.tv_nsec = 0;
+       	reportV.t_sys.tv_sec = 0;
+        reportV.t_sys.tv_nsec = 0;
+	reportV.cpuIdleTime.tv_sec = 0;
+        reportV.cpuIdleTime.tv_nsec = 0;
+        reportV.t_blocked[qONE].tv_sec = 0;
+        reportV.t_blocked[qONE].tv_nsec = 0;
+	reportV.t_blocked[qTWO].tv_sec = 0;
+        reportV.t_blocked[qTWO].tv_nsec = 0;
+	reportV.t_blocked[qTHREE].tv_sec = 0;
+	reportV.t_blocked[qTHREE].tv_nsec = 0;
 }
 
 //Print report
 static void report() {
-	printf("Report:");
-	printf("Average wait time");
-	printf("Average time in the system");
-	printf("Average CPU utilization");
-	printf("Average time a process waited in a blocked queue");
-	printf("CPU idle time");
+	divTime(&reportV.t_cpu, reportV.usersTerminated);
+        divTime(&reportV.t_wait, reportV.usersTerminated);
+        divTime(&reportV.t_sys, reportV.usersTerminated);
+        divTime(&reportV.t_blocked[pREAL], reportV.c_highprior);
+        divTime(&reportV.t_blocked[pNORM], reportV.c_lowprior);
+        printf("*****************************************************\n");
+        printf("\t\tSCHEDULING REPORT\n");
+        printf("Processes Statistic:\n");
+        printf("\tNumber of started processes: %d\n", reportV.usersStarted);
+        printf("\tNumber of terminated processes: %d\n", reportV.usersTerminated);
+        printf("\tNumber of IO bound processes: %d\n", reportV.c_highprior);
+        printf("\tNumber of CPU bound processes: %d\n", reportV.c_lowprior);
+        printf("\tCPU idle time: %lu:%lu\n",reportV.cpuIdleTime.tv_sec,reportV.cpuIdleTime.tv_nsec);
+        printf("Average Records:\n");
+        printf("\tAverage CPU utilization time: %lu:%lu\n",reportV.t_cpu.tv_sec,reportV.t_cpu.tv_nsec);
+        printf("\tAverage wait time: %lu:%lu\n",reportV.t_wait.tv_sec,reportV.t_wait.tv_nsec);
+        printf("\tAverage time in the system: %lu:%lu\n",reportV.t_sys.tv_sec,reportV.t_sys.tv_nsec);
+        printf("\tAverage blocked time:\n");
+        printf("\t\tIO Bound Processes: %lu:%lu\n",reportV.t_blocked[pREAL].tv_sec,reportV.t_blocked[pREAL].tv_nsec);        
+        printf("\t\tCPU Bound Processes: %lu:%lu\n",reportV.t_blocked[pNORM].tv_sec,reportV.t_blocked[pNORM].tv_nsec);
+        printf("*****************************************************\n");
+
 }
 
 //Interrupt signal & Alarm signal handler
@@ -330,10 +359,247 @@ static void handler(int sig){
 
 }
 
-static void scheduler() {
+static void clearUserPCB(int u){
+	struct timespec res;
+  	struct userPCB *usr = &shm->users[u];
+
+  	++reportV.usersTerminated;
+	//record the CPU time
+	addTime(&reportV.t_cpu,&usr->t_cpu);	
+
+	//get the system time
+	subTime(&usr->t_started, &shm->clock, &usr->t_sys);
+	addTime(&reportV.t_sys, &usr->t_sys);
+
+	//get wait time
+	subTime(&usr->t_cpu, &usr->t_sys, &res);
+	addTime(&reportV.t_wait, &res);	
+
+	waitpid(shm->users[u].pid, NULL, 0);
+	bzero(usr, sizeof(struct userPCB)); //Clear all data
+	
+	usr->state = sNEW;
+	markSlot(u); //mark the slot as free
+
+}
+
+static int scheduler(){
+	struct ossMsg message;
+	static struct timespec dispatch = {.tv_sec = 0, .tv_nsec = 0};
+	dispatch.tv_nsec = rand() % (MAXDISPATCH - MINDISPATCH + 1) + MINDISPATCH;
+	addTime(&shm->clock, &dispatch);
+
+	//qREADY is currently assigned from this function's parent
+	const int u = popQ(&pq[qREADY], 0);
+
+	struct userPCB *usr = &shm->users[u];
+	bzero(&message, sizeof(struct ossMsg));
+
+	++logLine;
+  	printf("OSS: Dispatching process with PID %u from queue %d at time %lu:%lu\n", usr->id, qREADY, shm->clock.tv_sec, shm->clock.tv_nsec);
+
+	++logLine;
+  	printf("OSS: total time this dispatch was %lu nanoseconds\n", dispatch.tv_nsec);
+
+	//Evaluate if the popped queue is either high or low priority
+	int TIMESLICE;
+	if(qREADY == qONE)
+		TIMESLICE = Q1_TIMESLICE;
+	else if(qREADY == qTWO)
+		TIMESLICE = Q2_TIMESLICE;
+	else
+		TIMESLICE = Q3_TIMESLICE;
+	message.timeslice = TIMESLICE;
+  	message.mtype = usr->pid;
+  	message.from = getpid();
+
+	//Send message to the queue
+	if ((msgsnd(qid, (void *)&message, MESSAGE_SIZE, 0) == -1) ||
+      		(msgrcv(qid, (void *)&message, MESSAGE_SIZE, getpid(), 0) == -1)){
+    		fprintf(stderr,"%s: Couldn't send and receive message. ",prog);
+		perror("Error");
+    		return -1;
+  	}
+
+	const int new_state = message.timeslice;
+	switch (new_state){
+		case sREADY:
+			usr->state = sREADY;
+
+			//Getting burst time
+			usr->t_burst.tv_sec = 0;
+    			usr->t_burst.tv_nsec = message.clock.tv_nsec;
+
+			//add burst time
+			addTime(&shm->clock, &usr->t_burst);
+
+			//update how long user ran on cpu
+			addTime(&usr->t_cpu, &usr->t_burst);
+
+
+			++logLine;
+    			printf("OSS: Receiving that process with PID %u ran for %lu nanoseconds\n", usr->id, usr->t_burst.tv_nsec);
+			
+			if(usr->q_location == qONE)
+				usr->q_location = qTWO;
+			else if(usr->q_location == qTWO)
+				usr->q_location = qTHREE;
+
+			++logLine;
+    			printf("OSS: Putting process with PID %u into end of queue %d\n", usr->id, usr->q_location);
+    			pushQ(usr->q_location, u);
+			break;
+		case sBLOCKED:
+    			usr->state = sBLOCKED;
+
+			usr->t_burst.tv_sec = 0;
+    			usr->t_burst.tv_nsec = message.clock.tv_nsec;
+			addTime(&shm->clock, &usr->t_burst);
+			addTime(&usr->t_cpu, &usr->t_burst);
+
+			//Get blocked time from the message from the child process
+			usr->t_blocked.tv_sec = message.blockedTime.tv_sec;
+    			usr->t_blocked.tv_nsec = message.blockedTime.tv_nsec;
+
+			//Update blocked time in the OSS Report
+			addTime(&reportV.t_blocked[usr->priority], &message.blockedTime);
+
+			addTime(&usr->t_blocked, &shm->clock); //add clock to wait time
+
+			++logLine;
+                        printf("OSS: Receiving that process with PID %u ran for %lu nanoseconds\n", usr->id, usr->t_burst.tv_nsec);
+
+			if (message.clock.tv_nsec != TIMESLICE){
+                                ++logLine;
+                                printf("OSS: process with PID %u not using its entire quantum\n",usr->id);
+                        }
+
+			++logLine;
+                        printf("OSS: Receiving that process with PID %u is blocking for event(%li:%li)\n",
+                                usr->id, usr->t_blocked.tv_sec, usr->t_blocked.tv_nsec);
+
+			//insert to blocked queue
+			++logLine;
+    			printf("OSS: Putting process with PID %u into blocked queue %d\n", usr->id, qBLOCKED);
+    			pushQ(qBLOCKED, u);
+    			break;
+		case sTERMINATED:
+			usr->state = sTERMINATED;
+
+			usr->t_burst.tv_sec = 0;
+    			usr->t_burst.tv_nsec = message.clock.tv_nsec;
+			addTime(&shm->clock, &usr->t_burst);
+			addTime(&usr->t_cpu, &usr->t_burst); //add burst to total cpu time
+
+
+			++logLine;
+                        printf("OSS: Receiving that process with PID %u ran for %lu nanoseconds\n", usr->id, usr->t_burst.tv_nsec);
+
+                        if (message.clock.tv_nsec != TIMESLICE){
+                                ++logLine;
+                                printf("OSS: process with PID %u not using its entire quantum\n", usr->id);
+                        }
+
+			++logLine;
+    			printf("OSS: Receiving that process with PID %u has terminated\n", usr->id);
+
+			clearUserPCB(u);
+			break;
+		default:
+			printf("OSS: Invalid response from user\n");
+    			break;
+	}
+	return 0;
+
+}
+
+static int runChildProcess(){
+	//static struct timespec t_idle = {.tv_sec = 0, .tv_nsec = 0};
+	static struct timespec t_idle;
+	static struct timespec diff_idle;
+	static int flag = 0;
+
+	if(pq[qONE].length == 0){
+		if(flag == 0){
+			++logLine;
+			printf("OSS: No ready process in queue %d at %li:%li\n", qONE, shm->clock.tv_sec, shm->clock.tv_nsec);
+			flag = 1;
+		}
+       	}else{
+		qREADY = qONE;
+		flag = 0;
+		if(t_idle.tv_sec != 0 && t_idle.tv_nsec != 0){
+			subTime(&t_idle, &shm->clock, &diff_idle);
+			addTime(&reportV.cpuIdleTime, &diff_idle);
+			t_idle.tv_sec = 0;
+                	t_idle.tv_nsec = 0;
+		}
+	}
+
+	//which means the queue one is currently empty
+	if(flag == 1){
+		if(pq[qTWO].length == 0){
+			++logLine;
+                	printf("OSS: No ready process in queue %d at %li:%li\n", qTWO, shm->clock.tv_sec, shm->clock.tv_nsec);
+			flag = 2;
+		}else{
+			qREADY = qTWO;
+			flag = 0;
+			if(t_idle.tv_sec != 0 && t_idle.tv_nsec != 0){
+	                        subTime(&t_idle, &shm->clock, &diff_idle);
+        	                addTime(&reportV.cpuIdleTime, &diff_idle);
+                	        t_idle.tv_sec = 0;
+                        	t_idle.tv_nsec = 0;
+                	}
+		}
+
+	}
+
+	//which means the queue two is currently empty
+	if(flag == 2){
+		if(pq[qTHREE].length == 0){
+                        ++logLine;
+                        printf("OSS: No ready process in queue %d at %li:%li\n", qTHREE, shm->clock.tv_sec, shm->clock.tv_nsec);
+                        flag = 3;
+                }else{
+                        qREADY = qTHREE;
+                        flag = 0;
+                        if(t_idle.tv_sec != 0 && t_idle.tv_nsec != 0){
+                                subTime(&t_idle, &shm->clock, &diff_idle);
+                                addTime(&reportV.cpuIdleTime, &diff_idle);
+                                t_idle.tv_sec = 0;
+                                t_idle.tv_nsec = 0;
+                        }
+                }
+
+        }
+
+	//which means all ready queues are empty at the moment
+	if(flag == 3){
+		if(pq[qBLOCKED].length == 0 && reportV.usersTerminated >= TOTAL_MAXPROC){
+                        ++logLine;
+                        printf("OSS: No blocked process in queue %d at %li:%li\n", qBLOCKED, shm->clock.tv_sec, shm->clock.tv_nsec);
+                        ++logLine;
+                        printf("OSS: The operating system will terminate right away\n");
+                        return -1; //return -1 to let OSS know there isn't any more process to schedule
+		}else{
+			if(t_idle.tv_sec == 0 && t_idle.tv_nsec == 0)
+				t_idle = shm->clock;
+			return 0;
+		}
+	}
+
+	scheduler();	
+	return 0;
+}
+
+static void runningCycle() {
 	while(reportV.usersTerminated < TOTAL_MAXPROC){
 		advanceTimer();
 	        unblockUsers();
+		if(runChildProcess() == -1) //return -1 when there is no more process to schedule
+			break;
+		checkLog();
 	}
 }
 
@@ -384,13 +650,28 @@ int main(int argc, char** argv){
 
 	signal(SIGINT, handler); 
 	signal(SIGALRM, handler);
-	alarm(maxSec);
 
-	if(menu(argc, argv) < 0) {
+	srand(getpid());
+
+	if(menu(argc, argv) < 0) 
 		return EXIT_FAILURE;
-	}
+	
+	
+	if(createSharedM() < 0)
+		return EXIT_FAILURE;
+
+	//clear shared memory, bitmap, and queues
+	bzero(shm, sizeof(struct sharedM));
+	bzero(pq, sizeof(struct queue)*qCOUNT);
+
+	alarm(maxSec);
+	atexit(deallocatesharedM);
 
 	//Initialize variables in the report
 	initReport();
+	runningCycle();
+
+	report();
+
 	return 0;
 }
