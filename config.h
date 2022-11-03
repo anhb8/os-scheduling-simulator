@@ -70,7 +70,7 @@ struct queue{
 //Process control block
 struct userPCB{
 	pid_t pid;
-	int priority;
+	int q_location;
 	unsigned int id;
 	enum state state;
 

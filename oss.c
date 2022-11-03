@@ -35,6 +35,15 @@ static unsigned int logLine = 0;
 
 //Report
 static struct ossReport reportV;
+
+//Check if log file exceeds 1000 lines
+static void checkLog(){
+	if(logLine >= MAXLINE){
+		printf("OSS: Current log has exceed %d lines, the system will terminate now\n",MAXLINE);
+		raise(SIGINT);
+	}
+}
+//Create shared memory, message queue
 static int createSharedM(){
 	//Shared memory
 	sid = shmget(sharedM_key, sizeof(struct sharedM), IPC_CREAT | IPC_EXCL | S_IRWXU);
@@ -91,6 +100,7 @@ static void deallocatesharedM(){
 		}	
 	}
 }
+
 static void markSlot(const int u) {
 	if (allProcesses[u]==0)
 		allProcesses[u]=1;
@@ -99,6 +109,7 @@ static void markSlot(const int u) {
 	
 }
 
+//Check free slot in the process control table 
 static int getFreeSlot() {
 	int i;
 	for (i=0;i<=MAXPROCESSES;i++){
@@ -115,6 +126,55 @@ static int pushQ(const int qid, const int index){
 	struct queue *q = &pq[qid];
   	q->ids[q->length++] = index;
   	return qid;
+
+}
+
+static int popQ(struct queue *currentQ, const int pos){
+	unsigned int i;
+  	unsigned int u = currentQ->ids[pos];
+
+	//Pop the items and then shift the rest to the left
+  	for (i = pos; i < currentQ->length - 1; i++){
+    		currentQ->ids[i] = currentQ->ids[i + 1];
+		
+  	}
+	//Update queue size
+	currentQ->length--;
+
+  	return u;
+
+}
+
+//Move blocked processes to the highest priority
+static void unblockUsers(){
+	unsigned int i;
+  	for (i = 0; i < pq[qBLOCKED].length;i++){
+		//Get first block index
+		const int u = pq[qBLOCKED].ids[i];
+		struct userPCB *usr = &shm->users[u];
+
+		//Check if it is time to unblock
+		if ((usr->t_blocked.tv_sec < shm->clock.tv_sec) ||
+        		((usr->t_blocked.tv_sec == shm->clock.tv_sec) &&
+         		(usr->t_blocked.tv_nsec <= shm->clock.tv_nsec))){
+			//Mark user states as ready
+			usr->state = sREADY;
+      			usr->t_blocked.tv_sec = 0;
+      			usr->t_blocked.tv_nsec = 0;
+			usr->q_location = qONE; //Put blocked process into first queue
+			
+			++logLine;
+			printf("OSS: Unblocked PID %d at %lu:%lu and put it in the back of queue %d\n", usr->id, shm->clock.tv_sec, shm->clock.tv_nsec, usr->q_location);
+
+			//pop from blocked queue
+			popQ(&pq[qBLOCKED], i);
+		        //pq[qBLOCKED].length--;
+
+			//push at the end of its ready queue
+			pushQ(usr->q_location, u);
+		}
+
+	}
 
 }
 
@@ -148,10 +208,10 @@ static int forkProcess(){
 		default: //Parent process
 			++reportV.usersStarted;
 			if(io_bound == pREAL){
-				usr->priority = qONE;
+				usr->q_location = qONE;
 				//reportV.c_highprior++;
 			}else{
-				usr->priority = qTWO;
+				usr->q_location = qTWO;
 				//eportV.c_lowprior++;
 			}
 
@@ -181,6 +241,17 @@ static void addTime(struct timespec *a, const struct timespec *b){
   	while (a->tv_nsec > max_ns){
     		a->tv_sec++;
     		a->tv_nsec -= max_ns;
+  	}
+}
+
+//Find time difference 
+static void subTime(struct timespec *a, struct timespec *b, struct timespec *c){
+	if (b->tv_nsec < a->tv_nsec){
+    		c->tv_sec = b->tv_sec - a->tv_sec - 1;
+    		c->tv_nsec = a->tv_nsec - b->tv_nsec;
+  	}else{
+    		c->tv_sec = b->tv_sec - a->tv_sec;
+    		c->tv_nsec = b->tv_nsec - a->tv_nsec;
   	}
 }
 
@@ -261,7 +332,8 @@ static void handler(int sig){
 
 static void scheduler() {
 	while(reportV.usersTerminated < TOTAL_MAXPROC){
-		//Write 
+		advanceTimer();
+	        unblockUsers();
 	}
 }
 
